@@ -28,7 +28,8 @@
                     </div>
                     <div class="card-body border">
                         <vue-dropzone ref="myVueDropzone" id="dropzone" :options="dropzoneOptions"
-                                      @vdropzone-success="dropzoneAfterSuccess"></vue-dropzone>
+                                      @vdropzone-success="dropzoneAfterSuccess"
+                                      @vdropzone-mounted="dropzoneMounted"></vue-dropzone>
                     </div>
                 </div>
             </div>
@@ -117,24 +118,23 @@ export default {
         variants: {
             type: Array,
             required: true
+        }, product: {
+            type: Object,
+            required: true
         }
     },
     data() {
         return {
-            product_name: '',
-            product_sku: '',
-            description: '',
+            product_name: this.product.title,
+            product_sku: this.product.sku,
+            description: this.product.description,
             images: [],
-            product_variant: [
-                {
-                    option: this.variants[0].id,
-                    tags: []
-                }
-            ],
-            product_variant_prices: [],
+            product_variant: this.product.product_variants,
+            product_variant_prices: this.product.variant_prices,
             dropzoneOptions: {
                 url: 'https://httpbin.org/post',
                 thumbnailWidth: 150,
+                createImageThumbnails: true,
                 maxFilesize: 0.5,
                 headers: {"My-Awesome-Header": "header value"}
             }
@@ -143,6 +143,17 @@ export default {
     methods: {
         dropzoneAfterSuccess(file) {
             this.images.push(file.dataURL)
+        },
+        dropzoneMounted() {
+            this.product.images.forEach(image => {
+                if (image.length > 0) {
+                    const file = {name: image.title, type: image.type, dataURL: image.file_url, size: image.size};
+                    this.$refs.myVueDropzone.manuallyAddFile(file, image.file_url,);
+                    this.$refs.myVueDropzone.dropzone.emit('thumbnail', file, file.dataURL)
+                    this.images.push(image.base)
+                }
+
+            });
         },
         // it will push a new object into product variant
         newVariant() {
@@ -155,6 +166,8 @@ export default {
                 option: available_variants[0],
                 tags: []
             })
+
+            this.checkVariant()
         },
 
         // check the variant and render all the combination
@@ -166,10 +179,11 @@ export default {
             })
 
             this.getCombn(tags).forEach(item => {
+                let db_variant = _.find(this.product.variant_prices, {title: item});
                 this.product_variant_prices.push({
                     title: item,
-                    price: 0,
-                    stock: 0
+                    price: _.get(db_variant, 'price', 0),
+                    stock: _.get(db_variant, 'stock', 0),
                 })
             })
         },
@@ -199,10 +213,11 @@ export default {
             }
 
 
-            axios.post('/product', product).then(response => {
+            axios.put('/product/' + this.product.id, product).then(response => {
                 toastr.success(response.data.message);
+                console.log(response.data)
                 setTimeout(function () {
-                    location.reload(true);
+                    window.location.href = response.data.goto;
                 }, 2000)
             }).catch(error => {
                 toastr.error(error.response.data.message);
